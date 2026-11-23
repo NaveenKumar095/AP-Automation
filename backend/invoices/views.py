@@ -1,20 +1,24 @@
 from rest_framework import generics, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 
 from django.utils import timezone
 
 from .models import Invoice
 from .serializers import InvoiceSerializer
+from rest_framework.decorators import api_view, permission_classes
 
 
 class InvoiceListCreateAPIView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Invoice.objects.select_related('vendor').all()
     serializer_class = InvoiceSerializer
 
 
 class InvoiceDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Invoice.objects.select_related('vendor').all()
     serializer_class = InvoiceSerializer
 
@@ -41,6 +45,7 @@ class InvoiceDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         return super().update(request, *args, **kwargs)
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def submit_invoice(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
 
@@ -60,6 +65,7 @@ def submit_invoice(request, pk):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def approve_invoice(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
 
@@ -82,6 +88,7 @@ def approve_invoice(request, pk):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def reject_invoice(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
 
@@ -112,6 +119,7 @@ def reject_invoice(request, pk):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def mark_invoice_paid(request, pk):
     invoice = get_object_or_404(Invoice, pk=pk)
 

@@ -1,9 +1,18 @@
 
+from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 from rest_framework import status
 
 
 class InvoiceAPITests(APITestCase):
+
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="testuser",
+            password="TestPass123!"
+        )
+        self.client.force_authenticate(user=self.user)
 
     def test_invoice_list_api(self):
         response = self.client.get("/api/invoices/")

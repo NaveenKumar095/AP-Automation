@@ -1,8 +1,17 @@
-const API_BASE_URL = "https://ap-automation-api.onrender.com/api";
+const API_BASE_URL = "http://127.0.0.1:8000/api";
+const getAccessToken = () => localStorage.getItem("access_token");
+const authHeaders = (extra = {}) => ({
+  ...extra,
+  Authorization: `Bearer ${getAccessToken()}`,
+});
 
 export const invoiceAPI = {
   getAll: async () => {
-    const response = await fetch(`${API_BASE_URL}/invoices/`);
+    const response = await fetch(`${API_BASE_URL}/invoices/`, {
+      headers: {
+        Authorization: `Bearer ${getAccessToken()}`,
+      },
+    });
     if (!response.ok) throw new Error("Failed to fetch invoices");
     return response.json();
   },
@@ -10,9 +19,12 @@ export const invoiceAPI = {
   create: async (data) => {
     const response = await fetch(`${API_BASE_URL}/invoices/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({
+        "Content-Type": "application/json",
+      }),
       body: JSON.stringify(data),
     });
+
     if (!response.ok) throw new Error("Failed to create invoice");
     return response.json();
   },
@@ -20,9 +32,9 @@ export const invoiceAPI = {
   update: async (id, data) => {
     const response = await fetch(`${API_BASE_URL}/invoices/${id}/`, {
       method: "PATCH",
-      headers: {
+      headers: authHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(data),
     });
 
@@ -36,6 +48,7 @@ export const invoiceAPI = {
   remove: async (id) => {
     const response = await fetch(`${API_BASE_URL}/invoices/${id}/`, {
       method: "DELETE",
+      headers: authHeaders(),
     });
 
     if (!response.ok) {
@@ -48,6 +61,7 @@ export const invoiceAPI = {
   submit: async (id) => {
     const response = await fetch(`${API_BASE_URL}/invoices/${id}/submit/`, {
       method: "POST",
+      headers: authHeaders(),
     });
 
     const result = await response.json();
@@ -62,6 +76,7 @@ export const invoiceAPI = {
   approve: async (id) => {
     const response = await fetch(`${API_BASE_URL}/invoices/${id}/approve/`, {
       method: "POST",
+      headers: authHeaders(),
     });
 
     if (!response.ok) {
@@ -74,9 +89,9 @@ export const invoiceAPI = {
   reject: async (id, rejectionReason) => {
     const response = await fetch(`${API_BASE_URL}/invoices/${id}/reject/`, {
       method: "POST",
-      headers: {
+      headers: authHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         rejection_reason: rejectionReason,
       }),
@@ -94,6 +109,7 @@ export const invoiceAPI = {
   pay: async (id) => {
     const response = await fetch(`${API_BASE_URL}/invoices/${id}/pay/`, {
       method: "POST",
+      headers: authHeaders(),
     });
 
     const result = await response.json();
@@ -103,5 +119,90 @@ export const invoiceAPI = {
     }
 
     return result;
+  },
+};
+
+export const authAPI = {
+  register: async (data) => {
+    const response = await fetch(`${API_BASE_URL}/auth/register/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(JSON.stringify(result));
+    }
+
+    return result;
+  },
+
+  login: async (credentials) => {
+    const response = await fetch(`${API_BASE_URL}/auth/login/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(credentials),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.detail || "Login failed");
+    }
+
+    return result;
+  },
+};
+
+export const vendorAPI = {
+  getAll: async () => {
+    const response = await fetch(`${API_BASE_URL}/vendors/`, {
+      headers: authHeaders(),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch vendors");
+    return response.json();
+  },
+
+  create: async (data) => {
+    const response = await fetch(`${API_BASE_URL}/vendors/`, {
+      method: "POST",
+      headers: authHeaders({
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) throw new Error("Failed to create vendor");
+    return response.json();
+  },
+
+  update: async (id, data) => {
+    const response = await fetch(`${API_BASE_URL}/vendors/${id}/`, {
+      method: "PATCH",
+      headers: authHeaders({
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) throw new Error("Failed to update vendor");
+    return response.json();
+  },
+
+  remove: async (id) => {
+    const response = await fetch(`${API_BASE_URL}/vendors/${id}/`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+
+    if (!response.ok) throw new Error("Failed to delete vendor");
+    return true;
   },
 };

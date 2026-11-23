@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { invoiceAPI } from "./api";
+import { invoiceAPI, vendorAPI, authAPI } from "./api";
 
 import {
   LayoutDashboard,
@@ -53,8 +53,6 @@ import {
 
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:8000/api/vendors/";
-
 const navigation = [
   { label: "Overview", icon: LayoutDashboard },
   { label: "Invoices", icon: FileText },
@@ -66,6 +64,20 @@ const navigation = [
 
 function App() {
   const [activePage, setActivePage] = useState("Overview");
+
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    Boolean(localStorage.getItem("access_token")),
+  );
+
+  const [authMode, setAuthMode] = useState("login");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  const [authForm, setAuthForm] = useState({
+    username: "",
+    email: "",
+    password: "",
+  });
 
   const [vendors, setVendors] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -168,15 +180,10 @@ function App() {
   });
 
   // Fetch vendors
+
   async function loadVendors() {
     try {
-      const response = await fetch(API_URL);
-
-      if (!response.ok) {
-        throw new Error("Could not load vendors.");
-      }
-
-      const data = await response.json();
+      const data = await vendorAPI.getAll();
 
       setError("");
       setVendors(data);
@@ -185,6 +192,77 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+
+    try {
+      const result = await authAPI.login({
+        username: authForm.username,
+        password: authForm.password,
+      });
+
+      localStorage.setItem("access_token", result.access);
+      localStorage.setItem("refresh_token", result.refresh);
+
+      setIsLoggedIn(true);
+      setAuthForm({ username: "", email: "", password: "" });
+
+      await loadVendors();
+      await loadInvoices();
+    } catch (err) {
+      setAuthError(err.message || "Login failed.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault();
+    setAuthLoading(true);
+    setAuthError("");
+
+    try {
+      await authAPI.register({
+        username: authForm.username,
+        email: authForm.email,
+        password: authForm.password,
+      });
+
+      setAuthForm({
+        username: authForm.username,
+        email: "",
+        password: "",
+      });
+
+      setAuthMode("login");
+      setAuthError("Registration successful. Please log in.");
+    } catch (err) {
+      setAuthError(err.message || "Registration failed.");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+
+    setIsLoggedIn(false);
+    setActivePage("Overview");
+    setAuthMode("login");
+    setAuthError("");
+    setAuthForm({
+      username: "",
+      email: "",
+      password: "",
+    });
+
+    setInvoices([]);
+    setVendors([]);
   }
 
   // Fetch invoices
@@ -356,13 +434,15 @@ function App() {
   }
 
   useEffect(() => {
+    if (!isLoggedIn) return;
+
     const task = window.setTimeout(() => {
       loadVendors();
       loadInvoices();
     }, 0);
 
     return () => window.clearTimeout(task);
-  }, []);
+  }, [isLoggedIn]);
 
   // Filter vendors
   const filteredVendors = useMemo(() => {
@@ -401,6 +481,7 @@ function App() {
   }
 
   // Add or update vendor
+
   async function handleAddVendor(event) {
     event.preventDefault();
 
@@ -408,32 +489,16 @@ function App() {
     setError("");
 
     try {
-      const isEditing = Boolean(editingVendor);
+      const dataToSave = {
+        ...form,
+        payment_terms: Number(form.payment_terms),
+      };
 
-      const url = isEditing ? `${API_URL}${editingVendor.id}/` : API_URL;
+      const data = editingVendor
+        ? await vendorAPI.update(editingVendor.id, dataToSave)
+        : await vendorAPI.create(dataToSave);
 
-      const response = await fetch(url, {
-        method: isEditing ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...form,
-          payment_terms: Number(form.payment_terms),
-        }),
-      });
-
-      const data = response.status === 204 ? null : await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          Object.values(data || {})
-            .flat()
-            .join(" ") || "Could not save vendor.",
-        );
-      }
-
-      if (isEditing) {
+      if (editingVendor) {
         setVendors((current) =>
           current.map((vendor) =>
             vendor.id === editingVendor.id ? data : vendor,
@@ -472,6 +537,7 @@ function App() {
   }
 
   // Delete vendor
+
   async function handleDeleteVendor(vendor) {
     const confirmed = window.confirm(
       `Are you sure you want to delete ${vendor.name}?`,
@@ -482,13 +548,7 @@ function App() {
     setDeletingVendor(true);
 
     try {
-      const response = await fetch(`${API_URL}${vendor.id}/`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Could not delete vendor.");
-      }
+      await vendorAPI.remove(vendor.id);
 
       setVendors((current) => current.filter((item) => item.id !== vendor.id));
     } catch (err) {
@@ -540,6 +600,114 @@ function App() {
     Reports: "FINANCIAL REPORTING",
   };
 
+  // Show login or registration when the user is not logged in
+  if (!isLoggedIn) {
+    return (
+      <div className="auth-container">
+        <h1>APFlow</h1>
+        <p>Accounts Payable Automation</p>
+
+        {authMode === "login" ? (
+          <form onSubmit={handleLogin}>
+            <h2>Welcome Back</h2>
+
+            <input
+              type="text"
+              placeholder="Username"
+              value={authForm.username}
+              onChange={(e) =>
+                setAuthForm({ ...authForm, username: e.target.value })
+              }
+              required
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={authForm.password}
+              onChange={(e) =>
+                setAuthForm({ ...authForm, password: e.target.value })
+              }
+              required
+            />
+
+            <button type="submit" disabled={authLoading}>
+              {authLoading ? "Logging in..." : "Login"}
+            </button>
+
+            <p>
+              Don't have an account?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("register");
+                  setAuthError("");
+                }}
+              >
+                Register
+              </button>
+            </p>
+          </form>
+        ) : (
+          <form onSubmit={handleRegister}>
+            <h2>Create Account</h2>
+
+            <input
+              type="text"
+              placeholder="Username"
+              value={authForm.username}
+              onChange={(e) =>
+                setAuthForm({ ...authForm, username: e.target.value })
+              }
+              required
+            />
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={authForm.email}
+              onChange={(e) =>
+                setAuthForm({ ...authForm, email: e.target.value })
+              }
+              required
+            />
+
+            <input
+              type="password"
+              placeholder="Password (minimum 8 characters)"
+              value={authForm.password}
+              onChange={(e) =>
+                setAuthForm({ ...authForm, password: e.target.value })
+              }
+              minLength={8}
+              required
+            />
+
+            <button type="submit" disabled={authLoading}>
+              {authLoading ? "Creating account..." : "Register"}
+            </button>
+
+            <p>
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                }}
+              >
+                Login
+              </button>
+            </p>
+          </form>
+        )}
+
+        {authError && <p role="alert">{authError}</p>}
+      </div>
+    );
+  }
+
+  // Existing dashboard
   return (
     <div className="dashboard-shell">
       {/* Sidebar */}
@@ -607,7 +775,16 @@ function App() {
                 <span>Administrator</span>
                 <hr />
                 <p>Workspace: AP Automation</p>
-                <p>Accounts Payable Automation</p>
+
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleLogout();
+                  }}
+                >
+                  Log out
+                </button>
               </div>
             )}
           </div>
